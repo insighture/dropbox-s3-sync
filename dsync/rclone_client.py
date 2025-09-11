@@ -27,8 +27,23 @@ class RcloneClient:
         config_dir.mkdir(parents=True, exist_ok=True)
         config_path = config_dir / 'rclone.conf'
 
+        # Get access token (handles OAuth refresh automatically)
+        try:
+            access_token = self.config.dropbox.get_access_token()
+        except Exception as e:
+            logger.error(f"Failed to get Dropbox access token: {e}")
+            if self.config.dropbox.use_oauth:
+                raise ValueError(
+                    "OAuth token not available. Please run the OAuth server first:\n"
+                    "1. python oauth_app.py\n"
+                    "2. Visit http://localhost:8000\n"
+                    "3. Complete the authorization flow"
+                )
+            else:
+                raise ValueError("Dropbox access token not configured")
+            
         # Create rclone config content
-        access_token = self.config.dropbox.access_token or ""
+        #s3 configuration
         access_key = self.config.s3.access_key or ""
         secret_key = self.config.s3.secret_key or ""
         region = self.config.s3.region or "us-east-1"
@@ -50,10 +65,16 @@ region = {region}
         config_path.write_text(config_content)
         logger.info(f"Created rclone config at {config_path}")
 
+        if self.config.dropbox.use_oauth:
+            logger.info("Using OAuth token for Dropbox authentication")
+        else:
+            logger.info("Using direct access token for Dropbox authentication")
+
         return config_path
 
     def _run_rclone(self, args: List[str], **kwargs) -> subprocess.CompletedProcess:
         """Run rclone command with proper configuration"""
+        
         cmd = [
             'rclone',
             '--config', str(self.rclone_config_path),
